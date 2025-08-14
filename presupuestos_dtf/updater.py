@@ -23,7 +23,7 @@ except Exception:
 # --- Config ---
 GITHUB_USER = "TermiSenpai"
 GITHUB_REPO = "presupuestoapp"
-ASSET_ZIP_NAME = "DTF_Pricing_Calculator_win64.zip"   # <--- el ZIP que subes a la release
+ASSET_ZIP_NAME = "DTF_Pricing_Calculator.zip"   # <--- el ZIP que subes a la release
 EXE_NAME = "DTF_Pricing_Calculator.exe"               # <--- exe dentro de la carpeta onedir
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")               # opcional para evitar rate-limit
 TIMEOUT = 30
@@ -75,12 +75,17 @@ def _download_zip(url: str) -> Path:
 def _extract_to_stage(zip_path: Path) -> Path:
     stage = Path(tempfile.mkdtemp(prefix="dtf_stage_"))
     with zipfile.ZipFile(zip_path, "r") as z:
-        z.extractall(stage)  # el ZIP que generas no debe llevar carpeta raíz
+        z.extractall(stage)
     try:
         zip_path.unlink(missing_ok=True)
     except Exception:
         pass
+    # Si el ZIP trae una única carpeta raíz, usarla como stage real
+    entries = [p for p in stage.iterdir() if p.name not in (".", "..")]
+    if len(entries) == 1 and entries[0].is_dir():
+        return entries[0]
     return stage
+
 
 # --- Reemplazo seguro con .bat: mata/espera, robocopy /MIR y relanza ---
 _REPLACER_BAT = r"""@echo off
