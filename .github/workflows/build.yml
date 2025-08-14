@@ -2,9 +2,9 @@ name: Build Windows (PyInstaller)
 
 on:
   push:
-    branches:
-      - main        
-  workflow_dispatch: 
+    tags:
+      - "v*"   # solo se ejecuta en tags que empiecen por v, ej: v1.0.0
+  workflow_dispatch:
 
 jobs:
   build:
@@ -20,30 +20,26 @@ jobs:
           python-version: "3.11"
 
       - name: Install deps
-        shell: bash
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if exist requirements.txt pip install -r requirements.txt
           pip install pyinstaller
+        shell: cmd
 
       - name: Build with PyInstaller
-        shell: bash
         run: |
-          pyinstaller --noconfirm --clean --noconsole --onedir \
-            --name DTF_Pricing_Calculator \
-            --icon PresupuestosDTF.ico \
+          pyinstaller --noconfirm --clean --noconsole --onedir ^
+            --name DTF_Pricing_Calculator ^
+            --icon PresupuestosDTF.ico ^
             main.py
+        shell: cmd
 
       - name: Zip dist
-        shell: pwsh
         run: |
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          [IO.Compression.ZipFile]::CreateFromDirectory(
-            "dist\DTF_Pricing_Calculator",
-            "dist\DTF_Pricing_Calculator.zip",
-            [IO.Compression.CompressionLevel]::Optimal,
-            $false
-          )
+          powershell -NoProfile -Command ^
+            "Add-Type -AssemblyName 'System.IO.Compression.FileSystem'; ^
+             [IO.Compression.ZipFile]::CreateFromDirectory('dist\\DTF_Pricing_Calculator','dist\\DTF_Pricing_Calculator.zip','Optimal',$false)"
+        shell: cmd
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -51,3 +47,14 @@ jobs:
           name: DTF_Pricing_Calculator
           path: dist/DTF_Pricing_Calculator.zip
           if-no-files-found: error
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/DTF_Pricing_Calculator.zip
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          body: |
+            Build generado automáticamente para la versión ${{ github.ref_name }}.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
