@@ -2,9 +2,11 @@ name: Build Windows (PyInstaller)
 
 on:
   push:
-    tags:
-      - "v*"   # solo se ejecuta en tags que empiecen por v, ej: v1.0.0
-  workflow_dispatch:
+    branches: [ main ]        # ejecuta en cada push a main
+  workflow_dispatch:          # permite lanzarlo manualmente
+
+permissions:
+  contents: write             # necesario para crear/actualizar releases
 
 jobs:
   build:
@@ -19,27 +21,49 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install deps
+      - name: Read version from __init__.py
+        id: get_version
+        shell: bash
+        run: |
+          python - << 'PY'
+          import re, pathlib, os
+          p = pathlib.Path("presupuestos_dtf/__init__.py")
+          m = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', p.read_text(encoding="utf-8"))
+          v = (m.group(1) if m else "").strip()
+          if not v:
+              raise SystemExit("No se encontró __version__ en presupuestos_dtf/__init__.py")
+          open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8").write(f"version={v}\n")
+          print("VERSION:", v)
+          PY
+
+      - name: Install dependencies
+        shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          if exist requirements.txt pip install -r requirements.txt
+          if (Test-Path "requirements.txt") { pip install -r requirements.txt }
           pip install pyinstaller
-        shell: cmd
 
       - name: Build with PyInstaller
+        shell: cmd
         run: |
           pyinstaller --noconfirm --clean --noconsole --onedir ^
             --name DTF_Pricing_Calculator ^
             --icon PresupuestosDTF.ico ^
             main.py
-        shell: cmd
 
       - name: Zip dist
+        shell: pwsh
         run: |
-          powershell -NoProfile -Command ^
-            "Add-Type -AssemblyName 'System.IO.Compression.FileSystem'; ^
-             [IO.Compression.ZipFile]::CreateFromDirectory('dist\\DTF_Pricing_Calculator','dist\\DTF_Pricing_Calculator.zip','Optimal',$false)"
-        shell: cmd
+          $src = "dist\DTF_Pricing_Calculator"
+          $dst = "dist\DTF_Pricing_Calculator.zip"
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          if (Test-Path $dst) { Remove-Item $dst -Force }
+          [IO.Compression.ZipFile]::CreateFromDirectory(
+            $src, $dst,
+            [IO.Compression.CompressionLevel]::Optimal,
+            $false
+          )
+          if ((Get-Item $dst).Length -lt 1KB) { throw "ZIP inválido (<1KB)" }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -48,13 +72,18 @@ jobs:
           path: dist/DTF_Pricing_Calculator.zip
           if-no-files-found: error
 
-      - name: Create GitHub Release
+      - name: Create/Update Release with version tag
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/DTF_Pricing_Calculator.zip
-          tag_name: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
+          tag_name: ${{ steps.get_version.outputs.version }}             # tag = 1.2.2
+          name: DTF Pricing Calculator ${{ steps.get_version.outputs.version }}  # título
           body: |
-            Build generado automáticamente para la versión ${{ github.ref_name }}.
+            Build automático para la versión ${{ steps.get_version.outputs.version }}.
+            (Generado desde push a main)
+          files: dist/DTF_Pricing_Calculator.zip
+          generate_release_notes: true
+          make_latest: true
+          fail_on_unmatched_files: true
+          replace_assets: true        # sustituye el ZIP si ya existía en esa release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
