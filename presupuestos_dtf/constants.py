@@ -1,0 +1,13 @@
+# -*- coding: utf-8 -*-
+
+MIN_VAL = 0.10
+DEFAULT_ROLL_WIDTH_CM = 57.0
+DEFAULT_PRICE_PER_METER = 11.0
+DEFAULT_MARGIN_TOP_CM = 0.5
+DEFAULT_MARGIN_RIGHT_CM = 0.5
+
+APP_DIRNAME = "PresupuestosDTF"
+CONFIG_FILENAME = "config.json"
+
+APP_TITLE = "Calculadora de presupuestos DTF"
+WINDOW_SIZE = "820x560"
