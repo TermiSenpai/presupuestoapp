@@ -1,0 +1,53 @@
+name: Build Windows (PyInstaller)
+
+on:
+  push:
+    branches:
+      - main        
+  workflow_dispatch: 
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pyinstaller
+
+      - name: Build with PyInstaller
+        shell: bash
+        run: |
+          pyinstaller --noconfirm --clean --noconsole --onedir \
+            --name DTF_Pricing_Calculator \
+            --icon PresupuestosDTF.ico \
+            main.py
+
+      - name: Zip dist
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [IO.Compression.ZipFile]::CreateFromDirectory(
+            "dist\DTF_Pricing_Calculator",
+            "dist\DTF_Pricing_Calculator.zip",
+            [IO.Compression.CompressionLevel]::Optimal,
+            $false
+          )
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DTF_Pricing_Calculator
+          path: dist/DTF_Pricing_Calculator.zip
+          if-no-files-found: error
