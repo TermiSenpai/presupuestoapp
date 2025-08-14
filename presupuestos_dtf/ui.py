@@ -2,6 +2,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from .constants import MIN_VAL, APP_TITLE, WINDOW_SIZE
+from . import __version__
 from .config import load_config, save_config
 from .models import CalcInput
 from .calc import compute_layout
@@ -9,7 +10,7 @@ from .calc import compute_layout
 class PresupuestoApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        root.title(APP_TITLE)
+        root.title(f"{APP_TITLE} — v{__version__}")
         root.geometry(WINDOW_SIZE)
         root.resizable(False, False)
 

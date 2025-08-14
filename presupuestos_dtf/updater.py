@@ -4,145 +4,140 @@ import sys
 import tempfile
 import shutil
 import subprocess
+import zipfile
+from pathlib import Path
 import requests
 
 # --- Resolver __version__ tanto si se ejecuta como paquete como script ---
 try:
-    # Cuando se ejecuta como módulo: python -m presupuestos_dtf.updater
     from . import __version__  # type: ignore
 except Exception:
-    # Cuando se ejecuta directamente: python presupuestos_dtf/updater.py
-    import pathlib
-    pkg_root = pathlib.Path(__file__).resolve().parents[1]  # carpeta raíz del proyecto
+    pkg_root = Path(__file__).resolve().parents[1]
     if str(pkg_root) not in sys.path:
         sys.path.insert(0, str(pkg_root))
     try:
         from presupuestos_dtf import __version__  # type: ignore
     except Exception:
-        __version__ = "0.0.0"  # fallback
+        __version__ = "0.0.0"
 
-# --- Configuración ---
+# --- Config ---
 GITHUB_USER = "TermiSenpai"
 GITHUB_REPO = "presupuestoapp"
-EXECUTABLE_NAME = "DTF_Pricing_Calculator.exe"  # debe coincidir con el asset de la release
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  # opcional
+ASSET_ZIP_NAME = "DTF_Pricing_Calculator_win64.zip"   # <--- el ZIP que subes a la release
+EXE_NAME = "DTF_Pricing_Calculator.exe"               # <--- exe dentro de la carpeta onedir
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")               # opcional para evitar rate-limit
+TIMEOUT = 30
 
 # --- Utilidades ---
 def _ver_tuple(s: str) -> tuple[int, ...]:
-    """Convierte una cadena de versión en tupla comparable (soporta prefijo v y sufijos -beta)."""
     core = s.lstrip("v").split("-")[0]
     return tuple(int(x) for x in core.split("."))
 
 def _gh_headers():
-    """Encabezados para la API de GitHub (con token si está disponible)."""
     h = {"Accept": "application/vnd.github+json"}
     if GITHUB_TOKEN:
         h["Authorization"] = f"Bearer {GITHUB_TOKEN}"
     return h
 
 # --- API ---
-def check_for_update():
-    """Comprueba si hay una versión más reciente disponible en GitHub."""
+def _latest_release():
     url = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/releases/latest"
+    r = requests.get(url, headers=_gh_headers(), timeout=TIMEOUT)
+    r.raise_for_status()
+    return r.json()
+
+def check_for_update():
+    """Devuelve (hay_update, tag, asset_zip_url)."""
     try:
-        resp = requests.get(url, headers=_gh_headers(), timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-
-        latest_version = data["tag_name"]  # ej. "v1.1.0"
+        data = _latest_release()
+        tag = data["tag_name"]
         asset_url = None
-        for asset in data.get("assets", []):
-            if asset.get("name") == EXECUTABLE_NAME:
-                asset_url = asset.get("browser_download_url")
+        for a in data.get("assets", []):
+            if a.get("name") == ASSET_ZIP_NAME:
+                asset_url = a.get("browser_download_url")
                 break
-
-        is_newer = _ver_tuple(latest_version) > _ver_tuple(__version__)
-        return is_newer, latest_version, asset_url
+        is_newer = _ver_tuple(tag) > _ver_tuple(__version__)
+        return is_newer, tag, asset_url
     except Exception as e:
         print(f"[Updater] check error: {e}")
         return False, None, None
 
-# --- Reemplazo seguro en Windows con .bat auxiliar ---
-_WINDOWS_REPLACER_BAT = r"""@echo off
+# --- Descarga y staging del ZIP ---
+def _download_zip(url: str) -> Path:
+    dst = Path(tempfile.gettempdir()) / ASSET_ZIP_NAME
+    with requests.get(url, stream=True, timeout=TIMEOUT) as r:
+        r.raise_for_status()
+        with open(dst, "wb") as f:
+            shutil.copyfileobj(r.raw, f)
+            f.flush(); os.fsync(f.fileno())
+    return dst
+
+def _extract_to_stage(zip_path: Path) -> Path:
+    stage = Path(tempfile.mkdtemp(prefix="dtf_stage_"))
+    with zipfile.ZipFile(zip_path, "r") as z:
+        z.extractall(stage)  # el ZIP que generas no debe llevar carpeta raíz
+    try:
+        zip_path.unlink(missing_ok=True)
+    except Exception:
+        pass
+    return stage
+
+# --- Reemplazo seguro con .bat: mata/espera, robocopy /MIR y relanza ---
+_REPLACER_BAT = r"""@echo off
 setlocal enableextensions
-set EXE=%~1
-set NEW=%~2
-set BAK=%EXE%.bak
+set "INSTALL=%~1"
+set "STAGE=%~2"
+set "PID=%~3"
+set "EXE=%~4"
 
-REM Espera breve para que el proceso principal termine
-timeout /t 1 /nobreak >nul
+REM Matar y esperar al proceso antiguo (hasta 45 s)
+taskkill /PID %PID% /T /F >nul 2>&1
+powershell -NoProfile -Command "try { Wait-Process -Id %PID% -Timeout 45 } catch {}" >nul 2>&1
 
-:waitloop
-REM Intenta renombrar el ejecutable actual a .bak (si está en uso, reintenta)
-move /y "%EXE%" "%BAK%" >nul 2>&1
-if errorlevel 1 (
-    timeout /t 1 /nobreak >nul
-    goto waitloop
-)
+REM Pequeña espera por antivirus/IO
+timeout /t 2 /nobreak >nul
 
-REM Mueve el nuevo ejecutable a su lugar
-move /y "%NEW%" "%EXE%" >nul 2>&1
+REM Copia espejo: borra lo que sobra y copia lo nuevo
+robocopy "%STAGE%" "%INSTALL%" /MIR /R:2 /W:1 >nul
 
-REM Lanza la nueva versión
-start "" "%EXE%"
+REM Relanzar
+start "" "%INSTALL%\%EXE%"
 
-REM Limpia el backup (.bak) tras arrancar la nueva versión
-del /f /q "%BAK%" >nul 2>&1
+REM Limpiar staging
+rmdir /s /q "%STAGE%" >nul 2>&1
 
 endlocal
 exit /b 0
 """
 
-def _launch_windows_replacer(current_exe: str, tmp_file: str):
-    """Crea y lanza un .bat que reemplaza el exe y relanza la app (Windows)."""
-    bat_path = os.path.join(tempfile.gettempdir(), "dtf_replacer.bat")
-    try:
-        with open(bat_path, "w", encoding="utf-8") as f:
-            f.write(_WINDOWS_REPLACER_BAT)
+def _launch_replacer(install_dir: Path, stage_dir: Path):
+    bat = Path(tempfile.gettempdir()) / "dtf_zip_replacer.bat"
+    bat.write_text(_REPLACER_BAT, encoding="utf-8")
+    pid = os.getpid()
+    subprocess.Popen(
+        ["cmd.exe", "/c", str(bat), str(install_dir), str(stage_dir), str(pid), EXE_NAME],
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    )
+    os._exit(0)  # cerrar la app actual para soltar locks
 
-        # Ejecuta el .bat; luego forzamos salida del proceso actual para liberar el lock
-        subprocess.Popen(
-            ["cmd.exe", "/c", bat_path, os.path.abspath(current_exe), os.path.abspath(tmp_file)],
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        )
-    except Exception as e:
-        print(f"[Updater] replacer launch error: {e}")
-    finally:
-        # IMPORTANTE: terminar TODO el proceso (no solo el hilo) para soltar el bloqueo.
-        os._exit(0)
-
+# --- Punto de entrada para la app ---
 def download_and_replace(download_url: str):
     """
-    Descarga la nueva versión. En Windows, delega el reemplazo a un .bat auxiliar
-    que espera a que la app se cierre, renombra a .bak, mueve el nuevo exe, borra el .bak y relanza.
+    NUEVO FLUJO (onedir + ZIP):
+    1) Descarga el ZIP del release.
+    2) Extrae a 'stage'.
+    3) Lanza un .bat que mata/espera, hace robocopy /MIR a la carpeta de instalación y relanza el .exe.
     """
-    tmp_file = os.path.join(tempfile.gettempdir(), EXECUTABLE_NAME)
+    zip_path = _download_zip(download_url)
+    stage = _extract_to_stage(zip_path)
 
-    # Descarga a %TEMP%
-    with requests.get(download_url, stream=True) as r:
-        r.raise_for_status()
-        with open(tmp_file, "wb") as f:
-            shutil.copyfileobj(r.raw, f)
+    # Carpeta de instalación (en --onedir es el directorio donde vive el .exe y las DLLs)
+    here = Path(sys.argv[0]).resolve()
+    install_dir = here.parent if here.suffix.lower() == ".exe" else Path.cwd()
 
-    current_exe = sys.argv[0]
-
-    if os.name == "nt":
-        _launch_windows_replacer(current_exe, tmp_file)
-    else:
-        # Fallback no-Windows: requiere que el proceso principal se cierre antes del replace.
-        backup = current_exe + ".bak"
-        try:
-            if os.path.exists(backup):
-                os.remove(backup)
-        except Exception:
-            pass
-        os.replace(current_exe, backup)
-        shutil.move(tmp_file, current_exe)
-        print("[Updater] Update installed. Restarting...")
-        subprocess.Popen([current_exe])
-        os._exit(0)
+    _launch_replacer(install_dir, stage)
 
 # --- Prueba manual ---
 if __name__ == "__main__":
-    ok, latest, url = check_for_update()
-    print(f"current={__version__} latest={latest} has_update={ok} url={url}")
+    ok, tag, url = check_for_update()
+    print(f"current={__version__} latest={tag} has_update={ok} url={url}")
