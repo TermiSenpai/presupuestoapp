@@ -11,12 +11,12 @@ from .calc import compute_layout
 PRESET_SIZES = {
     "Personalizado": None,  # No cambia nada
 
-    # --- Etiquetas / Branding interno ---
+    " --- Etiquetas / Branding --- ": None,
     "Etiqueta cuello 4×4 (cuadrado)": (4.0, 4.0),
     "Etiqueta interior 6×6 (cuadrado)": (6.0, 6.0),
     "Etiqueta interior 8×4": (8.0, 4.0),
 
-    # --- Logos pequeños (pecho, nuca, bolsillo) ---
+    " --- Logos pequeños --- ": None,
     "Logo mini 6×6 (cuadrado)": (6.0, 6.0),
     "Logo pecho 8×8 (cuadrado)": (8.0, 8.0),
     "Logo pecho 10×10 (cuadrado)": (10.0, 10.0),
@@ -24,13 +24,13 @@ PRESET_SIZES = {
     "Logo rectangular 8×12": (8.0, 12.0),
     "Logo rectangular 10×15": (10.0, 15.0),
 
-    # --- Mangas ---
+    " --- Mangas --- ": None,
     "Manga corta 8×12": (8.0, 12.0),
     "Manga corta 10×15": (10.0, 15.0),
     "Manga larga 8×30": (8.0, 30.0),
     "Manga larga 10×35": (10.0, 35.0),
 
-    # --- Frontales camiseta/sudadera ---
+    " --- Frontales --- ": None,
     "Frontal pequeño 20×20 (cuadrado)": (20.0, 20.0),
     "Frontal pequeño 20×25": (20.0, 25.0),
     "Frontal medio 25×25 (cuadrado)": (25.0, 25.0),
@@ -38,49 +38,49 @@ PRESET_SIZES = {
     "Frontal grande 30×30 (cuadrado)": (30.0, 30.0),
     "Frontal grande 30×40": (30.0, 40.0),
 
-    # --- Espalda estándar / grande ---
+    " --- Espalda --- ": None,
     "Espalda estándar 30×30 (cuadrado)": (30.0, 30.0),
     "Espalda estándar 30×35": (30.0, 35.0),
     "Espalda grande 35×35 (cuadrado)": (35.0, 35.0),
     "Espalda grande 35×40": (35.0, 40.0),
 
-    # --- Oversized / tallas grandes ---
+    " --- Oversized --- ": None,
     "Oversized pecho 38×45": (38.0, 45.0),
     "Oversized espalda 40×50": (40.0, 50.0),
     "Oversized 40×40 (cuadrado)": (40.0, 40.0),
     "Oversized 45×45 (cuadrado)": (45.0, 45.0),
 
-    # --- Pantalones / Shorts ---
+    " --- Pantalones --- ": None,
     "Pierna lateral 10×30": (10.0, 30.0),
     "Pierna grande 12×50": (12.0, 50.0),
     "Muslo/Short 15×15 (cuadrado)": (15.0, 15.0),
 
-    # --- Gorras / Beanies ---
+    " --- Gorras --- ": None,
     "Gorra frontal 10×5": (10.0, 5.0),
     "Gorra frontal 6×6 (cuadrado)": (6.0, 6.0),
 
-    # --- Bolsas / Mochilas ---
+    " --- Bolsas / Mochilas --- ": None,
     "Bolsa tote 25×25 (cuadrado)": (25.0, 25.0),
     "Bolsa shopper 30×35": (30.0, 35.0),
     "Mochila saco 20×25": (20.0, 25.0),
 
-    # --- Parches / Apliques ---
+    " --- Parches / Apliques --- ": None,
     "Parche pequeño 8×8 (cuadrado)": (8.0, 8.0),
     "Parche mediano 12×12 (cuadrado)": (12.0, 12.0),
     "Parche grande 20×20 (cuadrado)": (20.0, 20.0),
 
-    # --- Infantil / Bebé ---
+    " --- Infantil --- ": None,
     "Body bebé 8×8 (cuadrado)": (8.0, 8.0),
     "Camiseta niño 15×15 (cuadrado)": (15.0, 15.0),
     "Camiseta niño 20×20 (cuadrado)": (20.0, 20.0),
 
-    # --- Textiles grandes (toallas/cojines) ---
+    " --- Textiles grandes --- ": None,
     "Toalla mano 30×50": (30.0, 50.0),
-    "Toalla baño 50×70": (50.0, 70.0),
-    "Toalla playa 60×100": (60.0, 100.0),
+    "Toalla baño 50×70": (50.0, 70.0),    
     "Funda cojín 40×40 (cuadrado)": (40.0, 40.0),
     "Funda cojín 50×50 (cuadrado)": (50.0, 50.0),
 }
+
 
 
 
@@ -158,7 +158,7 @@ class PresupuestoApp:
             textvariable=self.size_preset,
             values=list(PRESET_SIZES.keys()),
             state="readonly",
-            width=30
+            width=35
         )
         cmb.grid(row=0, column=1, padx=6, pady=6)
         cmb.bind("<<ComboboxSelected>>", self._on_preset_changed)
