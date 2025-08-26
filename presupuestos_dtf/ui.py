@@ -7,6 +7,83 @@ from .config import load_config, save_config
 from .models import CalcInput
 from .calc import compute_layout
 
+# Tamaños predefinidos (cm): nombre -> (ancho, alto)
+PRESET_SIZES = {
+    "Personalizado": None,  # No cambia nada
+
+    # --- Etiquetas / Branding interno ---
+    "Etiqueta cuello 4×4 (cuadrado)": (4.0, 4.0),
+    "Etiqueta interior 6×6 (cuadrado)": (6.0, 6.0),
+    "Etiqueta interior 8×4": (8.0, 4.0),
+
+    # --- Logos pequeños (pecho, nuca, bolsillo) ---
+    "Logo mini 6×6 (cuadrado)": (6.0, 6.0),
+    "Logo pecho 8×8 (cuadrado)": (8.0, 8.0),
+    "Logo pecho 10×10 (cuadrado)": (10.0, 10.0),
+    "Logo pecho 12×12 (cuadrado)": (12.0, 12.0),
+    "Logo rectangular 8×12": (8.0, 12.0),
+    "Logo rectangular 10×15": (10.0, 15.0),
+
+    # --- Mangas ---
+    "Manga corta 8×12": (8.0, 12.0),
+    "Manga corta 10×15": (10.0, 15.0),
+    "Manga larga 8×30": (8.0, 30.0),
+    "Manga larga 10×35": (10.0, 35.0),
+
+    # --- Frontales camiseta/sudadera ---
+    "Frontal pequeño 20×20 (cuadrado)": (20.0, 20.0),
+    "Frontal pequeño 20×25": (20.0, 25.0),
+    "Frontal medio 25×25 (cuadrado)": (25.0, 25.0),
+    "Frontal medio 25×35": (25.0, 35.0),
+    "Frontal grande 30×30 (cuadrado)": (30.0, 30.0),
+    "Frontal grande 30×40": (30.0, 40.0),
+
+    # --- Espalda estándar / grande ---
+    "Espalda estándar 30×30 (cuadrado)": (30.0, 30.0),
+    "Espalda estándar 30×35": (30.0, 35.0),
+    "Espalda grande 35×35 (cuadrado)": (35.0, 35.0),
+    "Espalda grande 35×40": (35.0, 40.0),
+
+    # --- Oversized / tallas grandes ---
+    "Oversized pecho 38×45": (38.0, 45.0),
+    "Oversized espalda 40×50": (40.0, 50.0),
+    "Oversized 40×40 (cuadrado)": (40.0, 40.0),
+    "Oversized 45×45 (cuadrado)": (45.0, 45.0),
+
+    # --- Pantalones / Shorts ---
+    "Pierna lateral 10×30": (10.0, 30.0),
+    "Pierna grande 12×50": (12.0, 50.0),
+    "Muslo/Short 15×15 (cuadrado)": (15.0, 15.0),
+
+    # --- Gorras / Beanies ---
+    "Gorra frontal 10×5": (10.0, 5.0),
+    "Gorra frontal 6×6 (cuadrado)": (6.0, 6.0),
+
+    # --- Bolsas / Mochilas ---
+    "Bolsa tote 25×25 (cuadrado)": (25.0, 25.0),
+    "Bolsa shopper 30×35": (30.0, 35.0),
+    "Mochila saco 20×25": (20.0, 25.0),
+
+    # --- Parches / Apliques ---
+    "Parche pequeño 8×8 (cuadrado)": (8.0, 8.0),
+    "Parche mediano 12×12 (cuadrado)": (12.0, 12.0),
+    "Parche grande 20×20 (cuadrado)": (20.0, 20.0),
+
+    # --- Infantil / Bebé ---
+    "Body bebé 8×8 (cuadrado)": (8.0, 8.0),
+    "Camiseta niño 15×15 (cuadrado)": (15.0, 15.0),
+    "Camiseta niño 20×20 (cuadrado)": (20.0, 20.0),
+
+    # --- Textiles grandes (toallas/cojines) ---
+    "Toalla mano 30×50": (30.0, 50.0),
+    "Toalla baño 50×70": (50.0, 70.0),
+    "Toalla playa 60×100": (60.0, 100.0),
+    "Funda cojín 40×40 (cuadrado)": (40.0, 40.0),
+    "Funda cojín 50×50 (cuadrado)": (50.0, 50.0),
+}
+
+
+
 class PresupuestoApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
@@ -26,6 +103,7 @@ class PresupuestoApp:
         self.image_width_cm = tk.DoubleVar(value=1)
         self.image_height_cm = tk.DoubleVar(value=1)
         self.num_copies = tk.IntVar(value=1)
+        self.size_preset = tk.StringVar(value="Personalizado")
 
         # Notebook
         self.notebook = ttk.Notebook(root)
@@ -73,21 +151,44 @@ class PresupuestoApp:
         input_box = ttk.LabelFrame(frame, text="Datos del diseño")
         input_box.pack(side=tk.TOP, fill=tk.X, padx=6, pady=6)
 
-        ttk.Label(input_box, text="Ancho imagen (cm):").grid(row=0, column=0, sticky=tk.W, padx=6, pady=6)
-        ttk.Entry(input_box, textvariable=self.image_width_cm, width=12).grid(row=0, column=1, padx=6, pady=6)
+        # --- Nueva fila 0: preset de tamaños ---
+        ttk.Label(input_box, text="Tamaño predefinido:").grid(row=0, column=0, sticky=tk.W, padx=6, pady=6)
+        cmb = ttk.Combobox(
+            input_box,
+            textvariable=self.size_preset,
+            values=list(PRESET_SIZES.keys()),
+            state="readonly",
+            width=30
+        )
+        cmb.grid(row=0, column=1, padx=6, pady=6)
+        cmb.bind("<<ComboboxSelected>>", self._on_preset_changed)
 
-        ttk.Label(input_box, text="Alto imagen (cm):").grid(row=0, column=2, sticky=tk.W, padx=6, pady=6)
-        ttk.Entry(input_box, textvariable=self.image_height_cm, width=12).grid(row=0, column=3, padx=6, pady=6)
+        # --- Campos de ancho/alto pasan a fila 1 ---
+        ttk.Label(input_box, text="Ancho imagen (cm):").grid(row=1, column=0, sticky=tk.W, padx=6, pady=6)
+        ttk.Entry(input_box, textvariable=self.image_width_cm, width=12).grid(row=1, column=1, padx=6, pady=6)
 
-        ttk.Label(input_box, text="Número de copias:").grid(row=1, column=0, sticky=tk.W, padx=6, pady=6)
-        ttk.Entry(input_box, textvariable=self.num_copies, width=12).grid(row=1, column=1, padx=6, pady=6)
+        ttk.Label(input_box, text="Alto imagen (cm):").grid(row=1, column=2, sticky=tk.W, padx=6, pady=6)
+        ttk.Entry(input_box, textvariable=self.image_height_cm, width=12).grid(row=1, column=3, padx=6, pady=6)
+
+        # --- Copias y botón pasan a fila 2 ---
+        ttk.Label(input_box, text="Número de copias:").grid(row=2, column=0, sticky=tk.W, padx=6, pady=6)
+        ttk.Entry(input_box, textvariable=self.num_copies, width=12).grid(row=2, column=1, padx=6, pady=6)
 
         ttk.Button(input_box, text="Calcular", command=self.on_calcular)\
-            .grid(row=1, column=3, padx=6, pady=6, sticky=tk.E)
+            .grid(row=2, column=3, padx=6, pady=6, sticky=tk.E)
 
         self.result_frame = ttk.Frame(frame)
         self.result_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=6, pady=6)
         return frame
+
+    def _on_preset_changed(self, event=None):
+        name = self.size_preset.get()
+        pair = PRESET_SIZES.get(name)
+        if pair:
+            w, h = pair
+            self.image_width_cm.set(float(w))
+            self.image_height_cm.set(float(h))
+
 
     # -------- Atajos -------- #
     def _on_return(self, event=None):
