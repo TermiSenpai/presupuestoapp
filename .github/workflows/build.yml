@@ -84,6 +84,5 @@ jobs:
           generate_release_notes: true
           make_latest: true
           fail_on_unmatched_files: true
-          replace_assets: true        # sustituye el ZIP si ya existía en esa release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
